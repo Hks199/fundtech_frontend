@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import ExcelJS from 'exceljs';
 
 const product = { product_id: 'PRD001', current_quantity: '40', total_inventory_cost: '4400.00', average_cost_per_unit: '110.0000' };
 const entry = { event_id: 'a3f576d2-c267-4c19-8d93-7a4b8bedc055', product_id: 'PRD001', event_type: 'sale', status: 'applied', reason: null, occurred_at: new Date().toISOString(), processed_at: new Date().toISOString(), quantity: 12, unit_price: null, total_cost: '1240.00', allocations: [{ batch_id: '1', quantity: 10, unit_price: '100', cost: '1000' }, { batch_id: '2', quantity: 2, unit_price: '120', cost: '240' }] };
@@ -49,13 +50,24 @@ test('login, FIFO allocations, pagination, export, and sign out', async ({ page 
   await expect(page.getByRole('heading', { name: 'Inventory overview' })).toBeVisible();
   await expect(page.getByText('₹4,400.00').first()).toBeVisible();
   expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
+  const inventoryDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export Excel', exact: true }).click();
+  const inventoryFile = await inventoryDownload;
+  expect(inventoryFile.suggestedFilename()).toBe('fundtech-inventory.xlsx');
+  const inventoryWorkbook = new ExcelJS.Workbook();
+  await inventoryWorkbook.xlsx.readFile((await inventoryFile.path())!);
+  expect(inventoryWorkbook.getWorksheet('Inventory')!.getCell('B2').value).toBe(40);
   await page.getByRole('button', { name: 'Transaction ledger', exact: true }).click();
   await page.getByRole('button', { name: /View transaction/ }).first().click();
   await expect(page.getByRole('dialog')).toContainText('FIFO batch allocations');
   await expect(page.getByRole('dialog')).toContainText('₹1,240.00');
   await page.getByRole('button', { name: 'Close dialog' }).click();
-  const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export page' }).click();
-  expect((await download).suggestedFilename()).toBe('fundtech-ledger-page.csv');
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export page to Excel' }).click();
+  const ledgerFile = await download;
+  expect(ledgerFile.suggestedFilename()).toBe('fundtech-ledger-page.xlsx');
+  const ledgerWorkbook = new ExcelJS.Workbook();
+  await ledgerWorkbook.xlsx.readFile((await ledgerFile.path())!);
+  expect(ledgerWorkbook.getWorksheet('Transaction ledger')!.getCell('E2').value).toBe(1240);
   await page.getByRole('button', { name: 'Next page' }).click();
   await expect(page.getByText('Page 2', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next page' })).toBeDisabled();

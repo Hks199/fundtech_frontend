@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, Box, Boxes, Check, ChevronLeft, ChevronRight, CircleHelp, Download, Eye, EyeOff, FileText, Layers3, LayoutDashboard, LoaderCircle, LogOut, Menu, PackagePlus, Play, Plus, Radio, RefreshCw, Search, ShieldCheck, Sparkles, Wallet, X } from 'lucide-react';
 import { ApiError, createApi, login } from './api';
 import { demoApi } from './demo';
+import { downloadExcel } from './excel';
 import { ActivityChart, Empty, LedgerTable, Modal, ProductTable, StockBadge } from './components';
-import { dateTime, downloadCsv, entryCost, money, quantity, reasonText, totals } from './format';
+import { dateTime, entryCost, money, quantity, reasonText, totals } from './format';
 import type { Batch, Entry, EventInput, InventoryApi, PendingEvent, Product } from './types';
 
 type Page = 'Overview' | 'Inventory' | 'Transaction ledger' | 'Event studio';
@@ -30,6 +31,7 @@ function Login({ onLogin, onDemo, expired }: { onLogin: (token: string, username
 }
 
 function Workspace({ api, demo, username, onSignOut }: { api: InventoryApi; demo: boolean; username: string; onSignOut: (expired?: boolean) => void }) {
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState<Page>('Overview'); const [mobile, setMobile] = useState(false);
   const [products, setProducts] = useState<Product[]>([]); const [entries, setEntries] = useState<Entry[]>([]); const [recent, setRecent] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [error, setError] = useState(''); const [updated, setUpdated] = useState<Date | null>(null);
@@ -72,13 +74,33 @@ function Workspace({ api, demo, username, onSignOut }: { api: InventoryApi; demo
     catch (err) { handleError(err); setSimulation(`${sent} of 8 events confirmed queued for ${id}. The run stopped; check event statuses below.`); }
     finally { if (mounted.current) setSimulating(false); }
   }
-  function exportData() { if (page === 'Transaction ledger') downloadCsv('fundtech-ledger-page.csv', [['Event ID', 'Product', 'Type', 'Quantity', 'Cost', 'Status', 'Timestamp', 'Reason'], ...entries.map(e => [e.event_id, e.product_id, e.event_type, e.quantity, entryCost(e), e.status, e.occurred_at, e.reason])]); else downloadCsv('fundtech-inventory.csv', [['Product', 'Quantity', 'Inventory value', 'Average unit cost'], ...visibleProducts.map(p => [p.product_id, p.current_quantity, p.total_inventory_cost, p.average_cost_per_unit])]); }
+  async function exportData() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      if (page === 'Transaction ledger') {
+        await downloadExcel('fundtech-ledger-page.xlsx', 'Transaction ledger', [
+          ['Event ID', 'Product', 'Type', 'Quantity', 'Cost', 'Status', 'Timestamp', 'Reason'],
+          ...entries.map(e => [e.event_id, e.product_id, e.event_type, e.quantity, entryCost(e), e.status, e.occurred_at, e.reason]),
+        ], [3, 4]);
+      } else {
+        await downloadExcel('fundtech-inventory.xlsx', 'Inventory', [
+          ['Product', 'Quantity', 'Inventory value', 'Average unit cost'],
+          ...visibleProducts.map(p => [p.product_id, p.current_quantity, p.total_inventory_cost, p.average_cost_per_unit]),
+        ], [1, 2, 3]);
+      }
+    } catch (err) {
+      setError(`Excel export failed. ${errorMessage(err)}`);
+    } finally {
+      setExporting(false);
+    }
+  }
   return <div className="app-shell">
     {mobile && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobile(false)} />}
     <aside className={`sidebar ${mobile ? 'mobile-open' : ''}`}><Brand /><div className="workspace-switch"><span className="workspace-avatar">F</span><div><strong>Trading workspace</strong><small>Inventory management</small></div><span className="workspace-label">PRO</span></div><span className="nav-heading">WORKSPACE</span><nav>{navigation.map(({ name, icon: Icon }) => <button key={name} className={`nav-item ${page === name ? 'active' : ''}`} onClick={() => navigate(name)} aria-current={page === name ? 'page' : undefined}><Icon size={19} /><span>{name}</span>{name === 'Inventory' && <span className="nav-count">{products.length}</span>}{name === 'Event studio' && queuedCount > 0 && <span className="nav-count">{queuedCount}</span>}</button>)}</nav><div className="sidebar-bottom"><div className="fifo-card"><div className="flex items-center gap-2"><Layers3 size={17} /><strong>First in. First out.</strong></div><p>Every unit accounted for.<br />Every cost, in the right order.</p><button onClick={() => setHelp(true)}>How FIFO works <ArrowUpRight size={14} /></button></div><button className="nav-item" onClick={() => setHelp(true)}><CircleHelp size={18} /> Help & connection</button><div className="sidebar-profile"><span className="avatar">{username.slice(0, 2).toUpperCase()}</span><div><strong>{username}</strong><small>{demo ? 'Sample workspace' : 'Workspace admin'}</small></div><button className="icon-button" onClick={() => onSignOut()} aria-label={demo ? 'Exit preview' : 'Sign out'}><LogOut size={17} /></button></div></div></aside>
     <div className="main-shell"><header className="topbar"><div className="flex items-center gap-3"><button className="icon-button mobile-menu" onClick={() => setMobile(true)} aria-label="Open navigation"><Menu size={21} /></button><span className="breadcrumb">Workspace</span><ChevronRight size={14} className="muted" /><strong>{page}</strong></div><div className="topbar-right"><span className={`connection ${error ? 'offline' : ''}`}><i />{demo ? 'Preview mode' : error ? 'Connection issue' : updated ? 'Live workspace' : 'Connecting'}</span><span className="topbar-divider" /><span className="avatar small">{username.slice(0, 2).toUpperCase()}</span></div></header>
     <main>{demo && <div className="preview-banner"><span><Sparkles size={15} /> You’re exploring sample data. Sign in to manage your live inventory.</span><button onClick={() => onSignOut()}>Connect your workspace <ArrowRight size={15} /></button></div>}
-      <div className="page-heading"><div><div className="eyebrow text-green">YOUR WORKSPACE, AT A GLANCE</div><h1>{page === 'Overview' ? 'Inventory overview' : page}</h1><p>{page === 'Overview' ? 'A little clarity for everything coming in and going out.' : page === 'Inventory' ? 'Know what’s on hand, what it’s worth, and what needs attention.' : page === 'Transaction ledger' ? 'Every movement, recorded. Every sale, costed with FIFO.' : 'Put your inventory in motion with real-time events.'}</p></div><div className="heading-actions">{page !== 'Event studio' && <button className="btn btn-secondary" onClick={exportData} disabled={loading}><Download size={16} /> Export{page === 'Transaction ledger' ? ' page' : ''}</button>}<button className="btn btn-primary" disabled={demo || simulating || queuedCount >= 8} onClick={() => setEventModal(true)}><Plus size={17} /> New transaction</button></div></div>
+      <div className="page-heading"><div><div className="eyebrow text-green">YOUR WORKSPACE, AT A GLANCE</div><h1>{page === 'Overview' ? 'Inventory overview' : page}</h1><p>{page === 'Overview' ? 'A little clarity for everything coming in and going out.' : page === 'Inventory' ? 'Know what’s on hand, what it’s worth, and what needs attention.' : page === 'Transaction ledger' ? 'Every movement, recorded. Every sale, costed with FIFO.' : 'Put your inventory in motion with real-time events.'}</p></div><div className="heading-actions">{page !== 'Event studio' && <button className="btn btn-secondary" onClick={() => void exportData()} disabled={loading || exporting}><Download size={16} /> {exporting ? 'Exporting...' : page === 'Transaction ledger' ? 'Export page to Excel' : 'Export Excel'}</button>}<button className="btn btn-primary" disabled={demo || simulating || queuedCount >= 8} onClick={() => setEventModal(true)}><Plus size={17} /> New transaction</button></div></div>
       {error && <div className="notice error-notice flex items-center justify-between gap-3" role="alert"><span>{error}{updated && ' Displaying the last successful update.'}</span><button className="text-button" onClick={() => void refresh()}>Retry</button></div>}
       {notice && <div className="notice success-notice flex items-center justify-between" role="status">{notice}<button className="icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={16} /></button></div>}
       {(page === 'Overview' || page === 'Inventory') && <><div className="stats-grid">{[{ label: 'Total inventory value', value: money(summary.value), caption: 'Value of remaining FIFO batches', icon: Wallet, color: 'green' }, { label: 'Units on hand', value: quantity(summary.units), caption: 'Across your entire inventory', icon: Boxes, color: 'blue' }, { label: 'Total products', value: String(products.length).padStart(2, '0'), caption: `${products.filter(p => BigInt(p.current_quantity) > 0n).length} products currently in stock`, icon: Box, color: 'purple' }, { label: 'Stock alerts', value: String(lowStock).padStart(2, '0'), caption: 'Products with fewer than 25 units', icon: Activity, color: 'orange' }].map(({ label, value, caption, icon: Icon, color }) => <div className="stat-card" key={label}><div className="stat-top"><span>{label}</span><span className={`stat-icon ${color}`}><Icon size={19} /></span></div><strong className="stat-value">{loading ? '—' : value}</strong><div className="stat-caption">{label === 'Stock alerts' && lowStock > 0 ? <span className="alert-dot" /> : <span className="caption-dash" />}{caption}</div></div>)}</div></>}
