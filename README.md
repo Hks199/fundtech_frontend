@@ -21,7 +21,7 @@ The **Explore the preview** button opens a clearly labeled, read-only sample wor
 
 | Variable | Purpose |
 | --- | --- |
-| `API_PROXY_TARGET` | Backend origin for the local Vite proxy; defaults to `http://localhost:3000`. |
+| `API_PROXY_TARGET` | Backend origin for the local Vite proxy; defaults to `https://fundtech.niakylie.com`. |
 | `VITE_API_BASE_URL` | Public backend origin for deployment, without `/api` or a trailing slash. Leave empty if your host proxies `/api` to the backend. |
 | `VITE_CURRENCY` | Display currency (default `INR`); does not convert values. |
 
@@ -39,7 +39,7 @@ Restart Vite after changing environment variables. `VITE_` values are public and
 | Eight-event simulator | Eight ordered calls to `POST /api/events` |
 | Queued / completed / rejected event tracking | `GET /api/events/:eventId` |
 
-Bearer tokens stay in React memory, never browser storage. Reloading the page requires signing in again. Token expiry or an authenticated 401 returns to login. Credentials are sent only to the configured backend; use HTTPS in production.
+Login sessions are saved in the tab's session storage so reloading preserves login until the token expires. Signing out, token expiry, or an authenticated 401 clears the saved session. Passwords are never stored. Credentials are sent only to the configured backend; use HTTPS in production.
 
 Stock and ledger poll every 10 seconds while the tab is visible. Event statuses poll every 8 seconds, with at most 8 queued requests per poll. A 404 for an event means it has not been processed yet. After two minutes without confirmation, an event is labeled unconfirmed and can be checked again. A network or server error during submission is treated as uncertain delivery; inspect the event status before creating another event. The frontend never labels a queued transaction completed before the backend confirms it.
 

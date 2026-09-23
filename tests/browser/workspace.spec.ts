@@ -49,7 +49,10 @@ test('login, FIFO allocations, pagination, export, and sign out', async ({ page 
   await mockApi(page); await signIn(page);
   await expect(page.getByRole('heading', { name: 'Inventory overview' })).toBeVisible();
   await expect(page.getByText('₹4,400.00').first()).toBeVisible();
-  expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual({ local: 0, session: 0 });
+  expect(await page.evaluate(() => localStorage.length)).toBe(0);
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Inventory overview' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'View batches for PRD001' })).toBeVisible();
   const inventoryDownload = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export Excel', exact: true }).click();
   const inventoryFile = await inventoryDownload;
@@ -73,6 +76,8 @@ test('login, FIFO allocations, pagination, export, and sign out', async ({ page 
   await expect(page.getByRole('button', { name: 'Next page' })).toBeDisabled();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
 });
 
 test('invalid credentials stay on login with a useful error', async ({ page }) => {
@@ -84,7 +89,20 @@ test('invalid credentials stay on login with a useful error', async ({ page }) =
 test('expired token signs the user out', async ({ page }) => {
   await mockApi(page, { expired: true }); await signIn(page);
   await expect(page.getByRole('status')).toContainText('Your session expired');
+  expect(await page.evaluate(() => sessionStorage.getItem('fundtech.session'))).toBeNull();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
 });
+
+for (const stored of ['invalid JSON', JSON.stringify({ token: 'test-token', username: 'admin', expires: 1 })]) {
+  test(`reload discards invalid or expired session: ${stored}`, async ({ page }) => {
+    await page.goto('/');
+    await page.evaluate(value => sessionStorage.setItem('fundtech.session', value), stored);
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
+    expect(await page.evaluate(() => sessionStorage.getItem('fundtech.session'))).toBeNull();
+  });
+}
 
 test('sale omits unit price and shows a consumer rejection after queueing', async ({ page }) => {
   const submitted = await mockApi(page); await signIn(page);

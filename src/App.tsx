@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Activity, ArrowDownLeft, ArrowRight, ArrowUpRight, Box, Boxes, Check, ChevronLeft, ChevronRight, CircleHelp, Download, Eye, EyeOff, FileText, Layers3, LayoutDashboard, LoaderCircle, LogOut, Menu, PackagePlus, Play, Plus, Radio, RefreshCw, Search, ShieldCheck, Sparkles, Wallet, X } from 'lucide-react';
 import { ApiError, createApi, login } from './api';
+import { restoreSession, saveSession, type Session } from './session';
 import { demoApi } from './demo';
 import { downloadExcel } from './excel';
 import { ActivityChart, Empty, LedgerTable, Modal, ProductTable, StockBadge } from './components';
@@ -12,13 +13,13 @@ const navigation = [{ name: 'Overview', icon: LayoutDashboard }, { name: 'Invent
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Something went wrong. Please try again.';
 
 export default function App() {
-  const [session, setSession] = useState<{ token: string; username: string; expires: number } | null>(null);
+  const [session, setSession] = useState<Session | null>(restoreSession);
   const [demo, setDemo] = useState(false);
   const [expired, setExpired] = useState(false);
   const api = useMemo(() => demo ? demoApi : createApi(session?.token || ''), [demo, session]);
-  const signOut = useCallback((timedOut = false) => { setSession(null); setDemo(false); setExpired(timedOut); }, []);
+  const signOut = useCallback((timedOut = false) => { saveSession(null); setSession(null); setDemo(false); setExpired(timedOut); }, []);
   useEffect(() => { if (!session) return; const timer = setTimeout(() => signOut(true), Math.max(0, session.expires - Date.now())); return () => clearTimeout(timer); }, [session, signOut]);
-  if (!session && !demo) return <Login expired={expired} onDemo={() => setDemo(true)} onLogin={(token, username, seconds) => { setExpired(false); setSession({ token, username, expires: Date.now() + seconds * 1000 }); }} />;
+  if (!session && !demo) return <Login expired={expired} onDemo={() => setDemo(true)} onLogin={(token, username, seconds) => { const nextSession = { token, username, expires: Date.now() + seconds * 1000 }; saveSession(nextSession); setExpired(false); setSession(nextSession); }} />;
   return <Workspace key={demo ? 'demo' : session!.token} api={api} demo={demo} username={session?.username || 'Preview'} onSignOut={signOut} />;
 }
 
