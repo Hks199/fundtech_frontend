@@ -64,12 +64,12 @@ Browser tests use installed Microsoft Edge in headless mode and start Vite autom
 ## Deploy
 
 1. Deploy the backend API and Kafka consumer using the backend's deployment instructions.
-2. On your frontend host (for example Vercel, Netlify, or a static site host), set `VITE_API_BASE_URL` to the HTTPS backend origin and `VITE_CURRENCY` as appropriate.
+2. On Vercel, leave `VITE_API_BASE_URL` unset or empty: the included `vercel.json` forwards `/api/*` and `/health/*` to `https://fundtech.niakylie.com`. Set `VITE_CURRENCY` as appropriate. On other hosts without a proxy, set `VITE_API_BASE_URL` to the HTTPS backend origin.
 3. Set the backend's `CORS_ORIGINS` to include the exact frontend origin.
 4. Build with `npm run build` and publish the `dist` directory. No SPA route rewrite is needed because navigation uses local view state.
 5. Sign in and validate a real purchase and sale with your deployment credentials.
 
-Vite's development proxy is not included in production output. If leaving `VITE_API_BASE_URL` empty in production, configure an equivalent reverse proxy on the host. No public deployment URL is created by this repository; deployment needs a host and backend URL.
+Vite's development proxy is not included in production output. Vercel uses the repository's `vercel.json` instead; deploy the commit containing this file for the rules to take effect. Other hosts need an equivalent reverse proxy if `VITE_API_BASE_URL` is empty. If the backend domain changes, update both `API_PROXY_TARGET` and the destinations in `vercel.json`.
 
 ## Source layout
 
